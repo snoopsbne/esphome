@@ -49,7 +49,9 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   ESP_LOGD(TAG, "PZEM AC: V=%.1f V, I=%.3f A, P=%.1f W, E=%.1f Wh, F=%.1f Hz, PF=%.2f", voltage, current, active_power,
            active_energy, frequency, power_factor);
   if (this->voltage_sensor_ != nullptr)
-    this->voltage_sensor_->publish_state(voltage);
+      this->voltage_sensor_->publish_state(voltage);
+  else
+      this->voltage_sensor_->publish_state(0.0f);  // Publish 0 if the sensor is null
   if (this->current_sensor_ != nullptr)
     this->current_sensor_->publish_state(current);
   if (this->power_sensor_ != nullptr)
