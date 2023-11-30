@@ -75,6 +75,7 @@ void PZEMAC::update() {
   if ((millis() - this->last_update_time) > 3000) {  // 3 seconds timeout
     if (this->voltage_sensor_ != nullptr)
       this->voltage_sensor_->publish_state(0.0f);
+  }
   this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); 
 }
 void PZEMAC::dump_config() {
