@@ -26,6 +26,8 @@ class PZEMAC : public PollingComponent, public modbus::ModbusDevice {
   void on_modbus_data(const std::vector<uint8_t> &data) override;
 
   void dump_config() override;
+ private:
+  uint32_t last_update_time;
 
  protected:
   template<typename... Ts> friend class ResetEnergyAction;
