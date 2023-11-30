@@ -65,12 +65,6 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   if (this->power_factor_sensor_ != nullptr)
     this->power_factor_sensor_->publish_state(power_factor);
 }
-if ((millis() - last_update_time) > 3000) {  // 3000 milliseconds = 3 seconds
-    // Set and publish all sensor values to 0
-    if (this->voltage_sensor_ != nullptr)
-        this->voltage_sensor_->publish_state(0.0f);
-    // Repeat for other sensors like current_sensor_, power_sensor_, etc.
-}
 void PZEMAC::update() { 
   if ((millis() - this->last_update_time) > 3000) {  // 3 seconds timeout
     if (this->voltage_sensor_ != nullptr)
