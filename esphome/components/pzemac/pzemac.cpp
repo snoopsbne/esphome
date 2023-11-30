@@ -10,6 +10,9 @@ static const uint8_t PZEM_CMD_READ_IN_REGISTERS = 0x04;
 static const uint8_t PZEM_CMD_RESET_ENERGY = 0x42;
 static const uint8_t PZEM_REGISTER_COUNT = 10;  // 10x 16-bit registers
 
+uint32_t last_update_time = 0;
+last_update_time = millis();
+
 void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   if (data.size() < 20) {
     ESP_LOGW(TAG, "Invalid size for PZEM AC!");
@@ -63,7 +66,12 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   if (this->power_factor_sensor_ != nullptr)
     this->power_factor_sensor_->publish_state(power_factor);
 }
-
+if ((millis() - last_update_time) > 3000) {  // 3000 milliseconds = 3 seconds
+    // Set and publish all sensor values to 0
+    if (this->voltage_sensor_ != nullptr)
+        this->voltage_sensor_->publish_state(0.0f);
+    // Repeat for other sensors like current_sensor_, power_sensor_, etc.
+}
 void PZEMAC::update() { this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); }
 void PZEMAC::dump_config() {
   ESP_LOGCONFIG(TAG, "PZEMAC:");
