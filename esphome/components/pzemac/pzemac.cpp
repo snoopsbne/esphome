@@ -53,8 +53,6 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
            active_energy, frequency, power_factor);
   if (this->voltage_sensor_ != nullptr)
       this->voltage_sensor_->publish_state(voltage);
-  else
-      this->voltage_sensor_->publish_state(0.0f);  // Publish 0 if the sensor is null
   if (this->current_sensor_ != nullptr)
     this->current_sensor_->publish_state(current);
   if (this->power_sensor_ != nullptr)
@@ -67,7 +65,7 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
     this->power_factor_sensor_->publish_state(power_factor);
 }
 void PZEMAC::update() { 
-  if ((millis() - this->last_update_time) > 5000) {  // 3 seconds timeout
+  if ((millis() - this->last_update_time) > 10000) {  // 3 seconds timeout
     if (this->voltage_sensor_ != nullptr)
       this->voltage_sensor_->publish_state(0.0f);
   }
