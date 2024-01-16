@@ -11,11 +11,11 @@ static const uint8_t PZEM_CMD_RESET_ENERGY = 0x42;
 static const uint8_t PZEM_REGISTER_COUNT = 10;  // 10x 16-bit registers
 
 void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
-  if (data.size() < 20) {
-    this->last_update_time = millis();
-    ESP_LOGW(TAG, "Invalid size for PZEM AC!");
-    return;
-  }
+  // if (data.size() < 20) {
+  //   this->last_update_time = millis();
+  //   ESP_LOGW(TAG, "Invalid size for PZEM AC!");
+  //   return;
+  // }
   
   this->last_update_time = millis();
   
@@ -65,9 +65,9 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
     this->power_factor_sensor_->publish_state(power_factor);
 }
 void PZEMAC::update() { 
-  if ((millis() - this->last_update_time) > 60000) {  // 60 seconds timeout
-    if (this->voltage_sensor_ != nullptr)
-      this->voltage_sensor_->publish_state(0.0f);
+  if ((millis() - this->last_update_time) > 12000) {  // 12 seconds timeout
+    //if (this->voltage_sensor_ != nullptr)
+    this->voltage_sensor_->publish_state(0.0f);
   }
   this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); 
 }
