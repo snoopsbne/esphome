@@ -26,9 +26,10 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
     return (uint16_t(data[i + 0]) << 8) | (uint16_t(data[i + 1]) << 0);
 
   // Update timestamp when new data is received
+  };
+  // Update timestamp when new data is received
   last_data_time_ = std::chrono::steady_clock::now();
 
-  };
   auto pzem_get_32bit = [&](size_t i) -> uint32_t {
     return (uint32_t(pzem_get_16bit(i + 2)) << 16) | (uint32_t(pzem_get_16bit(i + 0)) << 0);
   };
@@ -68,8 +69,8 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
 
 void PZEMAC::update() {
 
-  // Check for timeout (90 seconds)
-  if (std::chrono::steady_clock::now() - last_data_time_ > std::chrono::seconds(90)) {
+  // Check for timeout (60 seconds)
+  if (std::chrono::steady_clock::now() - last_data_time_ > std::chrono::seconds(60)) {
     // Reset all sensor values to zero
     if (voltage_sensor_) voltage_sensor_->publish_state(0.0);
     if (current_sensor_) current_sensor_->publish_state(0.0);
