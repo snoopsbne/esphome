@@ -66,8 +66,9 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
 }
 void PZEMAC::update() { 
   if ((millis() - this->last_update_time) > 12000) {  // 12 seconds timeout
-    //if (this->voltage_sensor_ != nullptr)
-    this->voltage_sensor_->publish_state(0.0f);
+    if (this->voltage_sensor_ != nullptr) {
+      this->voltage_sensor_->publish_state(0.0f);
+    }
   }
   this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); 
 }
