@@ -12,13 +12,10 @@ static const uint8_t PZEM_REGISTER_COUNT = 10;  // 10x 16-bit registers
 
 void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   if (data.size() < 20) {
-    this->last_update_time = millis();
     ESP_LOGW(TAG, "Invalid size for PZEM AC!");
     return;
   }
-  
-  this->last_update_time = millis();
-  
+
   // See https://github.com/esphome/feature-requests/issues/49#issuecomment-538636809
   //  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
   // 01 04 14 08 D1 00 6C 00 00 00 F4 00 00 00 26 00 00 01 F4 00 64 00 00 51 34
@@ -27,6 +24,10 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
 
   auto pzem_get_16bit = [&](size_t i) -> uint16_t {
     return (uint16_t(data[i + 0]) << 8) | (uint16_t(data[i + 1]) << 0);
+
+  // Update timestamp when new data is received
+  last_data_time_ = std::chrono::steady_clock::now();
+
   };
   auto pzem_get_32bit = [&](size_t i) -> uint32_t {
     return (uint32_t(pzem_get_16bit(i + 2)) << 16) | (uint32_t(pzem_get_16bit(i + 0)) << 0);
@@ -52,7 +53,7 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   ESP_LOGD(TAG, "PZEM AC: V=%.1f V, I=%.3f A, P=%.1f W, E=%.1f Wh, F=%.1f Hz, PF=%.2f", voltage, current, active_power,
            active_energy, frequency, power_factor);
   if (this->voltage_sensor_ != nullptr)
-      this->voltage_sensor_->publish_state(voltage);
+    this->voltage_sensor_->publish_state(voltage);
   if (this->current_sensor_ != nullptr)
     this->current_sensor_->publish_state(current);
   if (this->power_sensor_ != nullptr)
@@ -64,14 +65,21 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   if (this->power_factor_sensor_ != nullptr)
     this->power_factor_sensor_->publish_state(power_factor);
 }
-void PZEMAC::update() { 
-  if ((millis() - this->last_update_time) > 12000) {  // 12 seconds timeout
-    if (this->voltage_sensor_ != nullptr) {
-      this->voltage_sensor_->publish_state(0.0f);
-    }
+
+void PZEMAC::update() {
+
+  // Check for timeout (90 seconds)
+  if (std::chrono::steady_clock::now() - last_data_time_ > std::chrono::seconds(90)) {
+    // Reset all sensor values to zero
+    if (voltage_sensor_) voltage_sensor_->publish_state(0.0);
+    if (current_sensor_) current_sensor_->publish_state(0.0);
+    if (power_sensor_) power_sensor_->publish_state(0.0);
+    if (energy_sensor_) energy_sensor_->publish_state(0.0);
+    if (frequency_sensor_) frequency_sensor_->publish_state(0.0);
+    if (power_factor_sensor_) power_factor_sensor_->publish_state(0.0);
+    return;
   }
-  this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); 
-}
+ this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); }
 void PZEMAC::dump_config() {
   ESP_LOGCONFIG(TAG, "PZEMAC:");
   ESP_LOGCONFIG(TAG, "  Address: 0x%02X", this->address_);

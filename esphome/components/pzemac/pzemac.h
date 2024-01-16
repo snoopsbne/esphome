@@ -5,6 +5,8 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/modbus/modbus.h"
 
+#include <chrono>
+
 #include <vector>
 
 namespace esphome {
@@ -26,8 +28,6 @@ class PZEMAC : public PollingComponent, public modbus::ModbusDevice {
   void on_modbus_data(const std::vector<uint8_t> &data) override;
 
   void dump_config() override;
- private:
-  uint32_t last_update_time;
 
  protected:
   template<typename... Ts> friend class ResetEnergyAction;
@@ -37,6 +37,7 @@ class PZEMAC : public PollingComponent, public modbus::ModbusDevice {
   sensor::Sensor *energy_sensor_{nullptr};
   sensor::Sensor *frequency_sensor_{nullptr};
   sensor::Sensor *power_factor_sensor_{nullptr};
+  std::chrono::steady_clock::time_point last_data_time_;
 
   void reset_energy_();
 };
