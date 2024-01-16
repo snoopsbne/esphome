@@ -11,11 +11,11 @@ static const uint8_t PZEM_CMD_RESET_ENERGY = 0x42;
 static const uint8_t PZEM_REGISTER_COUNT = 10;  // 10x 16-bit registers
 
 void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
-  // if (data.size() < 20) {
-  //   this->last_update_time = millis();
-  //   ESP_LOGW(TAG, "Invalid size for PZEM AC!");
-  //   return;
-  // }
+  if (data.size() < 20) {
+    this->last_update_time = millis();
+    ESP_LOGW(TAG, "Invalid size for PZEM AC!");
+    return;
+  }
   
   this->last_update_time = millis();
   
