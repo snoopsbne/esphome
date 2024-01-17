@@ -70,7 +70,7 @@ void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
 void PZEMAC::update() {
 
   // Check for timeout (60 seconds)
-  if (std::chrono::steady_clock::now() - last_data_time_ > std::chrono::seconds(60)) {
+  if (std::chrono::steady_clock::now() - last_data_time_ > std::chrono::seconds(12)) {
     // Reset all sensor values to zero
     if (voltage_sensor_) voltage_sensor_->publish_state(0.0);
     if (current_sensor_) current_sensor_->publish_state(0.0);
