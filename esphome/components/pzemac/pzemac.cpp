@@ -78,6 +78,7 @@ void PZEMAC::update() {
     if (energy_sensor_) energy_sensor_->publish_state(0.0);
     if (frequency_sensor_) frequency_sensor_->publish_state(0.0);
     if (power_factor_sensor_) power_factor_sensor_->publish_state(0.0);
+    last_data_time_ = std::chrono::steady_clock::now();
     return;
   }
  this->send(PZEM_CMD_READ_IN_REGISTERS, 0, PZEM_REGISTER_COUNT); }
