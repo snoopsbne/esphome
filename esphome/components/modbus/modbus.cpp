@@ -106,7 +106,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         ESP_LOGD(TAG, "Modbus CRC Check failed, but ignored! %02X!=%02X", computed_crc, remote_crc);
       } else {
         ESP_LOGW(TAG, "Modbus CRC Check failed! %02X!=%02X", computed_crc, remote_crc);
-        return false;
+        //return false;
       }
     }
   }
