@@ -13,6 +13,7 @@ static const uint8_t PZEM_REGISTER_COUNT = 10;  // 10x 16-bit registers
 void PZEMAC::on_modbus_data(const std::vector<uint8_t> &data) {
   if (data.size() < 20) {
     ESP_LOGW(TAG, "Invalid size for PZEM AC!");
+    last_data_time_ = std::chrono::steady_clock::now();
     return;
   }
 
