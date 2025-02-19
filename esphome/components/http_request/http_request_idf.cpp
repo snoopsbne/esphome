@@ -126,7 +126,6 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
     }
 
     container->feed_wdt();
-    
     // Safely fetch headers with error checking
     int content_len = 0;
     err = ESP_OK;
@@ -140,17 +139,14 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
       err = ESP_FAIL;
       ESP_LOGE(TAG, "Exception while fetching headers");
     }
-    
     if (err != ESP_OK) {
       this->status_momentary_error("failed", 1000);
       ESP_LOGE(TAG, "HTTP Request failed while fetching headers");
       esp_http_client_cleanup(client);
       return nullptr;
     }
-    
     container->content_length = content_len;
     container->feed_wdt();
-    
     // Safely get status code with error handling
     int status_code = 0;
     try {
@@ -158,13 +154,11 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
       container->status_code = status_code;
     } catch (...) {
       this->status_momentary_error("failed", 1000);
-      ESP_LOGE(TAG, "Exception while getting status code");
+      ESP_LOGE(TAG, "Exception during emergency HTTP client cleanup");
       esp_http_client_cleanup(client);
       return nullptr;
     }
-    
     container->feed_wdt();
-    
     // Handle successful status code
     if (is_success(container->status_code)) {
       container->duration_ms = millis() - start;
@@ -173,7 +167,8 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
 
     // Handle connection error (-1) specially to prevent crash
     if (container->status_code == -1) {
-      ESP_LOGE(TAG, "HTTP Request failed with connection error; URL: %s; Code: %d", url.c_str(), container->status_code);
+      ESP_LOGE(TAG, "HTTP Request failed with connection error; URL: %s; Code: %d", url.c_str(),
+               container->status_code);
       this->status_momentary_error("failed", 1000);
       esp_http_client_cleanup(client);
       return nullptr;
@@ -183,7 +178,6 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
       auto num_redirects = this->redirect_limit_;
       while (is_redirect(container->status_code) && num_redirects > 0) {
         container->feed_wdt();
-        
         err = esp_http_client_set_redirection(client);
         if (err != ESP_OK) {
           ESP_LOGE(TAG, "esp_http_client_set_redirection failed: %s", esp_err_to_name(err));
@@ -254,7 +248,6 @@ int HttpContainerIDF::read(uint8_t *buf, size_t max_len) {
   }
 
   this->feed_wdt();
-  
   int read_len = 0;
   try {
     read_len = esp_http_client_read(this->client_, (char *) buf, bufsize);
@@ -262,9 +255,7 @@ int HttpContainerIDF::read(uint8_t *buf, size_t max_len) {
     ESP_LOGE("http_request.idf", "Exception while reading from HTTP client");
     return -1;
   }
-  
   this->feed_wdt();
-  
   if (read_len >= 0) {
     this->bytes_read_ += read_len;
   }
@@ -278,7 +269,6 @@ void HttpContainerIDF::end() {
   if (this->client_ == nullptr) {
     return;  // Already cleaned up
   }
-  
   watchdog::WatchdogManager wdm(this->parent_->get_watchdog_timeout());
 
   try {
