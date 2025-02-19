@@ -135,14 +135,11 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
     esp_http_client_cleanup(client);
     return nullptr;
   }
-  
   container->content_length = content_len;
   container->feed_wdt();
-  
   // Safely get status code
   container->status_code = esp_http_client_get_status_code(client);
   container->feed_wdt();
-  
   // Handle successful status code
   if (is_success(container->status_code)) {
     container->duration_ms = millis() - start;
@@ -151,8 +148,7 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
 
   // Handle connection error (-1) specially to prevent crash
   if (container->status_code == -1) {
-    ESP_LOGE(TAG, "HTTP Request failed with connection error; URL: %s; Code: %d", url.c_str(),
-             container->status_code);
+    ESP_LOGE(TAG, "HTTP Request failed with connection error; URL: %s; Code: %d", url.c_str(), container->status_code);
     this->status_momentary_error("failed", 1000);
     esp_http_client_cleanup(client);
     return nullptr;
@@ -226,7 +222,6 @@ int HttpContainerIDF::read(uint8_t *buf, size_t max_len) {
   this->feed_wdt();
   int read_len = esp_http_client_read(this->client_, (char *) buf, bufsize);
   this->feed_wdt();
-  
   if (read_len >= 0) {
     this->bytes_read_ += read_len;
   }
