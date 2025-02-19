@@ -15,6 +15,7 @@ namespace http_request {
 class HttpContainerIDF : public HttpContainer {
  public:
   HttpContainerIDF(esp_http_client_handle_t client) : client_(client) {}
+  ~HttpContainerIDF() override;
   int read(uint8_t *buf, size_t max_len) override;
   void end() override;
 

@@ -77,10 +77,14 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
   watchdog::WatchdogManager wdm(this->get_watchdog_timeout());
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
+  if (client == nullptr) {
+    this->status_momentary_error("failed", 1000);
+    ESP_LOGE(TAG, "HTTP Request failed; Could not initialize client");
+    return nullptr;
+  }
 
   std::shared_ptr<HttpContainerIDF> container = std::make_shared<HttpContainerIDF>(client);
   container->set_parent(this);
-
   container->set_secure(secure);
 
   for (const auto &header : headers) {
@@ -89,94 +93,156 @@ std::shared_ptr<HttpContainer> HttpRequestIDF::start(std::string url, std::strin
 
   const int body_len = body.length();
 
-  esp_err_t err = esp_http_client_open(client, body_len);
-  if (err != ESP_OK) {
-    this->status_momentary_error("failed", 1000);
-    ESP_LOGE(TAG, "HTTP Request failed: %s", esp_err_to_name(err));
-    esp_http_client_cleanup(client);
-    return nullptr;
-  }
+  try {
+    esp_err_t err = esp_http_client_open(client, body_len);
+    if (err != ESP_OK) {
+      this->status_momentary_error("failed", 1000);
+      ESP_LOGE(TAG, "HTTP Request failed: %s", esp_err_to_name(err));
+      esp_http_client_cleanup(client);
+      return nullptr;
+    }
 
-  if (body_len > 0) {
-    int write_left = body_len;
-    int write_index = 0;
-    const char *buf = body.c_str();
-    while (write_left > 0) {
-      int written = esp_http_client_write(client, buf + write_index, write_left);
-      if (written < 0) {
+    if (body_len > 0) {
+      int write_left = body_len;
+      int write_index = 0;
+      const char *buf = body.c_str();
+      while (write_left > 0) {
+        container->feed_wdt();  // Feed watchdog during long writes
+        int written = esp_http_client_write(client, buf + write_index, write_left);
+        if (written < 0) {
+          err = ESP_FAIL;
+          break;
+        }
+        write_left -= written;
+        write_index += written;
+      }
+    }
+
+    if (err != ESP_OK) {
+      this->status_momentary_error("failed", 1000);
+      ESP_LOGE(TAG, "HTTP Request failed: %s", esp_err_to_name(err));
+      esp_http_client_cleanup(client);
+      return nullptr;
+    }
+
+    container->feed_wdt();
+    
+    // Safely fetch headers with error checking
+    int content_len = 0;
+    err = ESP_OK;
+    try {
+      content_len = esp_http_client_fetch_headers(client);
+      // Check for fetch headers error
+      if (content_len < 0 && content_len != -1) {  // -1 is valid for chunked encoding
         err = ESP_FAIL;
-        break;
       }
-      write_left -= written;
-      write_index += written;
+    } catch (...) {
+      err = ESP_FAIL;
+      ESP_LOGE(TAG, "Exception while fetching headers");
     }
-  }
+    
+    if (err != ESP_OK) {
+      this->status_momentary_error("failed", 1000);
+      ESP_LOGE(TAG, "HTTP Request failed while fetching headers");
+      esp_http_client_cleanup(client);
+      return nullptr;
+    }
+    
+    container->content_length = content_len;
+    container->feed_wdt();
+    
+    // Safely get status code with error handling
+    int status_code = 0;
+    try {
+      status_code = esp_http_client_get_status_code(client);
+      container->status_code = status_code;
+    } catch (...) {
+      this->status_momentary_error("failed", 1000);
+      ESP_LOGE(TAG, "Exception while getting status code");
+      esp_http_client_cleanup(client);
+      return nullptr;
+    }
+    
+    container->feed_wdt();
+    
+    // Handle successful status code
+    if (is_success(container->status_code)) {
+      container->duration_ms = millis() - start;
+      return container;
+    }
 
-  if (err != ESP_OK) {
+    // Handle connection error (-1) specially to prevent crash
+    if (container->status_code == -1) {
+      ESP_LOGE(TAG, "HTTP Request failed with connection error; URL: %s; Code: %d", url.c_str(), container->status_code);
+      this->status_momentary_error("failed", 1000);
+      esp_http_client_cleanup(client);
+      return nullptr;
+    }
+
+    if (this->follow_redirects_) {
+      auto num_redirects = this->redirect_limit_;
+      while (is_redirect(container->status_code) && num_redirects > 0) {
+        container->feed_wdt();
+        
+        err = esp_http_client_set_redirection(client);
+        if (err != ESP_OK) {
+          ESP_LOGE(TAG, "esp_http_client_set_redirection failed: %s", esp_err_to_name(err));
+          this->status_momentary_error("failed", 1000);
+          esp_http_client_cleanup(client);
+          return nullptr;
+        }
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+        char redirect_url[256]{};
+        if (esp_http_client_get_url(client, redirect_url, sizeof(redirect_url) - 1) == ESP_OK) {
+          ESP_LOGV(TAG, "redirecting to url: %s", redirect_url);
+        }
+#endif
+        err = esp_http_client_open(client, 0);
+        if (err != ESP_OK) {
+          ESP_LOGE(TAG, "esp_http_client_open failed: %s", esp_err_to_name(err));
+          this->status_momentary_error("failed", 1000);
+          esp_http_client_cleanup(client);
+          return nullptr;
+        }
+
+        container->feed_wdt();
+        container->content_length = esp_http_client_fetch_headers(client);
+        container->feed_wdt();
+        container->status_code = esp_http_client_get_status_code(client);
+        container->feed_wdt();
+        if (is_success(container->status_code)) {
+          container->duration_ms = millis() - start;
+          return container;
+        }
+
+        num_redirects--;
+      }
+
+      if (num_redirects == 0) {
+        ESP_LOGW(TAG, "Reach redirect limit count=%d", this->redirect_limit_);
+      }
+    }
+
+    ESP_LOGE(TAG, "HTTP Request failed; URL: %s; Code: %d", url.c_str(), container->status_code);
     this->status_momentary_error("failed", 1000);
-    ESP_LOGE(TAG, "HTTP Request failed: %s", esp_err_to_name(err));
+    // Don't clean up client here - let the container handle it
+    return container;
+
+  } catch (...) {
+    // Catch any unexpected exceptions
+    ESP_LOGE(TAG, "Unexpected exception in HTTP request");
+    this->status_momentary_error("failed", 1000);
     esp_http_client_cleanup(client);
     return nullptr;
   }
-
-  container->feed_wdt();
-  container->content_length = esp_http_client_fetch_headers(client);
-  container->feed_wdt();
-  container->status_code = esp_http_client_get_status_code(client);
-  container->feed_wdt();
-  if (is_success(container->status_code)) {
-    container->duration_ms = millis() - start;
-    return container;
-  }
-
-  if (this->follow_redirects_) {
-    auto num_redirects = this->redirect_limit_;
-    while (is_redirect(container->status_code) && num_redirects > 0) {
-      err = esp_http_client_set_redirection(client);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_http_client_set_redirection failed: %s", esp_err_to_name(err));
-        this->status_momentary_error("failed", 1000);
-        esp_http_client_cleanup(client);
-        return nullptr;
-      }
-#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
-      char redirect_url[256]{};
-      if (esp_http_client_get_url(client, redirect_url, sizeof(redirect_url) - 1) == ESP_OK) {
-        ESP_LOGV(TAG, "redirecting to url: %s", redirect_url);
-      }
-#endif
-      err = esp_http_client_open(client, 0);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_http_client_open failed: %s", esp_err_to_name(err));
-        this->status_momentary_error("failed", 1000);
-        esp_http_client_cleanup(client);
-        return nullptr;
-      }
-
-      container->feed_wdt();
-      container->content_length = esp_http_client_fetch_headers(client);
-      container->feed_wdt();
-      container->status_code = esp_http_client_get_status_code(client);
-      container->feed_wdt();
-      if (is_success(container->status_code)) {
-        container->duration_ms = millis() - start;
-        return container;
-      }
-
-      num_redirects--;
-    }
-
-    if (num_redirects == 0) {
-      ESP_LOGW(TAG, "Reach redirect limit count=%d", this->redirect_limit_);
-    }
-  }
-
-  ESP_LOGE(TAG, "HTTP Request failed; URL: %s; Code: %d", url.c_str(), container->status_code);
-  this->status_momentary_error("failed", 1000);
-  return container;
 }
 
 int HttpContainerIDF::read(uint8_t *buf, size_t max_len) {
+  if (this->client_ == nullptr) {
+    ESP_LOGE("http_request.idf", "Attempted to read from null client");
+    return -1;
+  }
+
   const uint32_t start = millis();
   watchdog::WatchdogManager wdm(this->parent_->get_watchdog_timeout());
 
@@ -188,9 +254,20 @@ int HttpContainerIDF::read(uint8_t *buf, size_t max_len) {
   }
 
   this->feed_wdt();
-  int read_len = esp_http_client_read(this->client_, (char *) buf, bufsize);
+  
+  int read_len = 0;
+  try {
+    read_len = esp_http_client_read(this->client_, (char *) buf, bufsize);
+  } catch (...) {
+    ESP_LOGE("http_request.idf", "Exception while reading from HTTP client");
+    return -1;
+  }
+  
   this->feed_wdt();
-  this->bytes_read_ += read_len;
+  
+  if (read_len >= 0) {
+    this->bytes_read_ += read_len;
+  }
 
   this->duration_ms += (millis() - start);
 
@@ -198,16 +275,39 @@ int HttpContainerIDF::read(uint8_t *buf, size_t max_len) {
 }
 
 void HttpContainerIDF::end() {
+  if (this->client_ == nullptr) {
+    return;  // Already cleaned up
+  }
+  
   watchdog::WatchdogManager wdm(this->parent_->get_watchdog_timeout());
 
-  esp_http_client_close(this->client_);
-  esp_http_client_cleanup(this->client_);
+  try {
+    esp_http_client_close(this->client_);
+    this->feed_wdt();
+    esp_http_client_cleanup(this->client_);
+    this->client_ = nullptr;  // Mark as cleaned up
+  } catch (...) {
+    ESP_LOGE("http_request.idf", "Exception during HTTP client cleanup");
+  }
 }
 
 void HttpContainerIDF::feed_wdt() {
   // Tests to see if the executing task has a watchdog timer attached
   if (esp_task_wdt_status(nullptr) == ESP_OK) {
     App.feed_wdt();
+  }
+}
+
+HttpContainerIDF::~HttpContainerIDF() {
+  if (this->client_ != nullptr) {
+    // Safety net - ensure cleanup if container is destroyed
+    try {
+      esp_http_client_close(this->client_);
+      esp_http_client_cleanup(this->client_);
+    } catch (...) {
+      // Just log and continue destruction
+      ESP_LOGE("http_request.idf", "Exception during emergency HTTP client cleanup");
+    }
   }
 }
 

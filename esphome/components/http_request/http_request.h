@@ -47,10 +47,7 @@ enum HttpStatus {
   HTTP_STATUS_LENGTH_REQUIRED = 411,
 
   /* 5xx - Server Error */
-  HTTP_STATUS_INTERNAL_ERROR = 500,
-
-  /* UNKNOWN */
-  HTTP_STATUS_UNKNOWN_ERROR = -1
+  HTTP_STATUS_INTERNAL_ERROR = 500
 };
 
 /**
